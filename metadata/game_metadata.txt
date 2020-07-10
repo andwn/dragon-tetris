@@ -1,0 +1,6 @@
+#devid=andwn
+#devtitle=Andy Grind
+#gameid=dragon-tetris
+#gametitle=Dragon Tetris
+#version=0.1
+#icon=metadata/icon.png
