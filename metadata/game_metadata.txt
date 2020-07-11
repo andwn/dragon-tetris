@@ -1,4 +1,4 @@
-#devid=andwn
+#devid=grind
 #devtitle=Andy Grind
 #gameid=dragon-tetris
 #gametitle=Dragon Tetris
