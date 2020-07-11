@@ -1,6 +1,17 @@
+require 'app/credits.rb'
 require 'app/gui.rb'
+require 'app/hiscore.rb'
 require 'app/objects.rb'
-require 'app/scenes.rb'
+require 'app/game.rb'
+require 'app/settings.rb'
+require 'app/title.rb'
+
+def timestr(time)
+  ss = (time / 60) % 60
+  mm = (time / 60 / 60) % 60
+  hh = (time / 60 / 60 / 60)
+  ("%i" % hh) + ':' + ("%02i" % mm) + ":" + ("%02i" % ss)
+end
 
 $tick_count = 0
 $scene = SceneTitle.new

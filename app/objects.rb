@@ -56,11 +56,15 @@ class Tetromino
     end
     @blocks = newb
   end
-  def draw(xx, yy, args)
+  def draw(xx, yy, args, skip=0, size=32)
     for y in 0..3
+      if skip < 0
+        skip += 1
+        next
+      end
       for x in 0..3
         if @blocks[y*4 + x] > 0
-          args.outputs.sprites << [xx+(x+@x)*32, yy-(y+@y)*32, 32, 32, 'sprites/block.png', 0, 255] + @color
+          args.outputs.sprites << [xx+(x+@x)*size, yy-(y+@y)*size, size, size, 'sprites/block.png', 0, 255] + @color
         end
       end
     end
@@ -74,7 +78,7 @@ class RandomBag
     refill
   end
   def refill
-    @tetrominos = ['O', 'I', 'J', 'L', 'S', 'Z', 'T'].shuffle!
+    @tetrominos = %w[O I J L S Z T].shuffle!
   end
   def peek
     @tetrominos.peek
