@@ -37,7 +37,7 @@ class Tetromino
     t
   end
   def rot_left
-    newb = [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]
+    newb = Array.new(16, 0)
     size = %w[I O].include?(@type) ? 3 : 2
     for y in 0..size
       for x in 0..size
@@ -47,7 +47,7 @@ class Tetromino
     @blocks = newb
   end
   def rot_right
-    newb = [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]
+    newb = Array.new(16, 0)
     size = %w[I O].include?(@type) ? 3 : 2
     for y in 0..size
       for x in 0..size
@@ -58,12 +58,12 @@ class Tetromino
   end
   def draw(xx, yy, args, skip=0, size=32)
     for y in 0..3
-      if skip < 0
+      if skip.negative?
         skip += 1
         next
       end
       for x in 0..3
-        if @blocks[y*4 + x] > 0
+        if @blocks[y*4 + x].positive?
           args.outputs.sprites << [xx+(x+@x)*size, yy-(y+@y)*size, size, size, 'sprites/block.png', 0, 255] + @color
         end
       end

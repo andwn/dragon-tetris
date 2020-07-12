@@ -114,6 +114,7 @@ class SceneGame
 
   def hold_tetromino
     return if @just_held
+
     if @hold
       temp = @tet
       @tet = Tetromino.new(3, -2, @hold.type)
@@ -129,10 +130,9 @@ class SceneGame
     # Copy blocks over to the stage grid
     for y in 0..3
       for x in 0..3
-        if @tet.blocks[y*4 + x] > 0
-          next if @tet.y+y < 0 # Don't overflow top
-          @stage[@tet.x+x][@tet.y+y] = @tet.type
-        end
+        next if !@tet.blocks[y*4 + x].positive? || (@tet.y+y).negative?
+
+        @stage[@tet.x+x][@tet.y+y] = @tet.type
       end
     end
     # Clear completed rows
@@ -148,26 +148,30 @@ class SceneGame
       end
     end
     # Calculate score rewards
-    reward = 0
-    # 3-corner T-spin?
     if @tet.type == 'T' && detect_tspin(@tet)
-      reward += SCORE_TSPIN * @level if rows_cleared == 0
-      reward += SCORE_TSPIN_SINGLE * @level if rows_cleared == 1
-      reward += SCORE_TSPIN_DOUBLE * @level if rows_cleared == 2
-    else
-      # Immobile (EZ) T-spin?
-      if @tet.type == 'T' && wall_kick(@tet.dup)
-        reward += SCORE_EZ_TSPIN * @level if rows_cleared == 0
-        reward += SCORE_EZ_TSPIN_SINGLE * @level if rows_cleared == 1
-      else
-        # No T-spin
-        reward += SCORE_SINGLE * @level if rows_cleared == 1
-        reward += SCORE_DOUBLE * @level if rows_cleared == 2
-        reward += SCORE_TRIPLE * @level if rows_cleared == 3
-        reward += SCORE_TETRIS * @level if rows_cleared == 4
-      end
+      # 3-corner T-spin
+      @score += case rows_cleared
+                when 0 then SCORE_TSPIN * @level
+                when 1 then SCORE_TSPIN_SINGLE * @level
+                when 2 then SCORE_TSPIN_DOUBLE * @level
+                else 0
+                end
+    elsif @tet.type == 'T' && wall_kick(@tet.dup)
+      # Immobile (EZ) T-spin
+      @score += case rows_cleared
+                when 0 then SCORE_EZ_TSPIN * @level
+                when 1 then SCORE_EZ_TSPIN_SINGLE * @level
+                else 0
+                end
+    else # No T-spin
+      @score += case rows_cleared
+                when 1 then SCORE_SINGLE * @level
+                when 2 then SCORE_DOUBLE * @level
+                when 3 then SCORE_TRIPLE * @level
+                when 4 then SCORE_TETRIS * @level
+                else 0
+                end
     end
-    @score += reward
     # Update lines cleared total and level
     @lines_cleared += rows_cleared
     @total_lines += rows_cleared
@@ -182,6 +186,7 @@ class SceneGame
     for y in 0..3
       for x in 0..3
         next unless t.blocks[y*4 + x] > 0
+
         xx = t.x + x
         yy = t.y + y
         return false if xx < 0 || xx >= STAGE_W || yy >= STAGE_H
@@ -256,7 +261,7 @@ class SceneGame
     @tet.y = -2
     @just_held = false
     # New tetromino overlaps with a block? Game over!
-    @state = STATE_GAMEOVER unless validate_tetromino(@tet)
+    @next_state = STATE_GAMEOVER unless validate_tetromino(@tet)
     reset_speed
   end
 
@@ -271,87 +276,92 @@ class SceneGame
   def stop_music(args)
     @music_playing ||= false
     if @music_playing
-      # BUT HOW???
+      args.gtk.stop_music
       @music_playing = false
     end
   end
 
   def tick(args)
-    if @state == STATE_PLAYING
-      tick_playing(args)
-    elsif @state == STATE_PAUSED
-      tick_paused(args)
-    elsif @state == STATE_GAMEOVER
-      tick_gameover(args)
-    end
+    @next_state ||= @state
+    tick_playing(args) if @state == STATE_PLAYING
     draw_hud(args)
     draw_stage(args)
+    tick_paused(args) if @state == STATE_PAUSED
+    tick_gameover(args) if @state == STATE_GAMEOVER
+    @state = @next_state
   end
   def tick_playing(args)
     @time += 1
     kb = args.inputs.keyboard
     if kb.key_down.enter
-      @state = STATE_PAUSED
-    else
-      start_music(args)
-      # Moving left and right
-      if kb.key_down.left
-        move_tetromino_left
-        @shiftdir = -1
-        @autoshift = SHIFT_DELAY
-      elsif kb.key_down.right
-        move_tetromino_right
-        @shiftdir = 1
-        @autoshift = SHIFT_DELAY
+      @next_state = STATE_PAUSED
+      return
+    end
+    start_music(args)
+    # Moving left and right
+    if kb.key_down.left
+      move_tetromino_left
+      @shiftdir = -1
+      @autoshift = SHIFT_DELAY
+    elsif kb.key_down.right
+      move_tetromino_right
+      @shiftdir = 1
+      @autoshift = SHIFT_DELAY
+    end
+    # Delayed auto shift
+    if (kb.right ? 1:0) - (kb.left ? 1:0) == @shiftdir
+      @autoshift -= 1
+      if @autoshift.zero?
+        @autoshift = SHIFT_SPEED
+        move_tetromino_left if kb.left
+        move_tetromino_right if kb.right
       end
-      # Delayed auto shift
-      if (kb.right ? 1:0) - (kb.left ? 1:0) == @shiftdir
-        @autoshift -= 1
-        if @autoshift == 0
-          @autoshift = SHIFT_SPEED
-          move_tetromino_left if kb.left
-          move_tetromino_right if kb.right
-        end
-      end
-      # Rotation
-      rotate_tetromino_left if kb.key_down.z
-      rotate_tetromino_right if kb.key_down.x
-      rotate_tetromino_right if kb.key_down.up
-      # Hard drop
-      hard_drop if kb.key_down.space
-      # Hold
-      hold_tetromino if kb.key_down.shift
-      # Soft drop
-      if kb.key_down.down
-        @fall_time = DROP_GRAVITY
-        @dropping = true
+    end
+    # Rotation
+    rotate_tetromino_left if kb.key_down.z
+    rotate_tetromino_right if kb.key_down.x
+    rotate_tetromino_right if kb.key_down.up
+    # Hard drop
+    hard_drop if kb.key_down.space
+    # Hold
+    #hold_tetromino if kb.key_down.shift # Shift doesn't work?
+    hold_tetromino if kb.key_down.a
+    hold_tetromino if kb.key_down.c
+    # Soft drop
+    if kb.key_down.down
+      @fall_time = DROP_GRAVITY
+      @dropping = true
+      move_tetromino_down
+    elsif kb.key_up.down
+      reset_speed
+      @dropping = false
+    end
+    # Push tetromino down according to current gravity
+    @fall_ticks += 1
+    if @fall_ticks >= @fall_time
+      # If the tetromino is about to lock, always wait at least a half second
+      if !check_lock(@tet) || @fall_ticks >= LOCK_DELAY || kb.down
         move_tetromino_down
-      elsif kb.key_up.down
-        reset_speed
-        @dropping = false
-      end
-      # Push tetromino down according to current gravity
-      @fall_ticks += 1
-      if @fall_ticks >= @fall_time
-        # If the tetromino is about to lock, always wait at least a half second
-        if !check_lock(@tet) || @fall_ticks >= LOCK_DELAY || kb.down
-          move_tetromino_down
-        end
       end
     end
   end
   def tick_paused(args)
     if args.inputs.keyboard.key_down.enter
-      @state = STATE_PLAYING
+      @next_state = STATE_PLAYING
     else
-      args.outputs.labels << [640, 540, "PAUSED", 32, 1] + WHITE_FONT
+      args.outputs.sprites << [640-140, 440-80, 280, 80,
+                               'sprites/white.png', 0, 255, 31,31,31]
+      args.outputs.labels << [640, 440, 'PAUSED', 32, 1] + WHITE_FONT
     end
   end
   def tick_gameover(args)
     stop_music(args)
-    @btn_ok ||= Button.new(600, 40, 80, 32, "OK",
-                           lambda { $scene = SceneScore.new(@level, @time, @score) })
-    args.outputs.labels << [640, 540, "GAME OVER!", 32, 1] + WHITE_FONT
+    @btn_ok ||= Button.new(580, 240, 120, 48, 'OK',
+                           -> { $scene = SceneScore.new(@level, @time, @score) })
+    # Game over text
+    args.outputs.sprites << [640-240, 540-80, 480, 80,
+                             'sprites/white.png', 0, 255, 31,31,31]
+    args.outputs.labels << [640, 540, 'GAME OVER!', 32, 1] + WHITE_FONT
     @btn_ok.tick(args)
   end
 
@@ -359,8 +369,10 @@ class SceneGame
   STAGE_Y = 32
   def draw_stage(args)
     # Background / border
-    args.outputs.borders << [STAGE_X-1, STAGE_Y-1, STAGE_W*32+2, STAGE_H*32+2, 255,255,255,255]
-    args.outputs.solids << [STAGE_X, STAGE_Y, STAGE_W*32, STAGE_H*32, 31,31,31,255]
+    args.outputs.sprites << [STAGE_X-2, STAGE_Y-2, STAGE_W*32+4, STAGE_H*32+4,
+                             'sprites/white.png']
+    args.outputs.sprites << [STAGE_X, STAGE_Y, STAGE_W*32, STAGE_H*32,
+                             'sprites/white.png', 0, 255, 31,31,31]
     # Blocks
     for y in 0..STAGE_H-1
       for x in 0..STAGE_W-1
@@ -374,7 +386,7 @@ class SceneGame
     # Phantom tetromino
     phantom_tetromino(@tet).draw(STAGE_X, STAGE_Y+STAGE_H*32-32, args)
     # Current tetromino
-    @tet.draw(STAGE_X, STAGE_Y+STAGE_H*32-32, args, @tet.y) if @tet
+    @tet&.draw(STAGE_X, STAGE_Y+STAGE_H*32-32, args, @tet.y)
   end
 
   HOLD_X = STAGE_X - 240
@@ -385,24 +397,22 @@ class SceneGame
   NEXT_Y = 700
   def draw_hud(args)
     # Hold
-    args.outputs.labels << [HOLD_X, HOLD_Y, "HOLD:", 4, 0] + MAIN_FONT
-    @hold.draw(HOLD_X, HOLD_Y-64, args) if @hold
+    args.outputs.labels << [HOLD_X, HOLD_Y, 'HOLD:', 4, 0] + MAIN_FONT
+    @hold&.draw(HOLD_X, HOLD_Y-64, args)
     # Score & High Score
-    args.outputs.labels << [SCORE_X,     SCORE_Y, "SCORE:", 4, 0] + MAIN_FONT
+    args.outputs.labels << [SCORE_X,     SCORE_Y, 'SCORE:', 4, 0] + MAIN_FONT
     args.outputs.labels << [SCORE_X+200, SCORE_Y-32, @score.to_s, 4, 2] + MAIN_FONT
-    #args.outputs.labels << [SCORE_X,     SCORE_Y-128, "HI SCORE:", 4, 0] + MAIN_FONT
-    #args.outputs.labels << [SCORE_X+200, SCORE_Y-176, @hiscore.to_s, 4, 2] + MAIN_FONT
     # Level & Lines
-    args.outputs.labels << [SCORE_X,     SCORE_Y-80, "LEVEL:", 4, 0] + MAIN_FONT
+    args.outputs.labels << [SCORE_X,     SCORE_Y-80, 'LEVEL:', 4, 0] + MAIN_FONT
     args.outputs.labels << [SCORE_X+200, SCORE_Y-112, @level.to_s, 4, 2] + MAIN_FONT
-    args.outputs.labels << [SCORE_X,     SCORE_Y-144, "NEXT:", 4, 0] + MAIN_FONT
+    args.outputs.labels << [SCORE_X,     SCORE_Y-144, 'NEXT:', 4, 0] + MAIN_FONT
     args.outputs.labels << [SCORE_X+200, SCORE_Y-176, (LINES_PER_LEVEL - @lines_cleared).to_s, 4, 2] + MAIN_FONT
-    args.outputs.labels << [SCORE_X,     SCORE_Y-208, "TOTAL:", 4, 0] + MAIN_FONT
+    args.outputs.labels << [SCORE_X,     SCORE_Y-208, 'TOTAL:', 4, 0] + MAIN_FONT
     args.outputs.labels << [SCORE_X+200, SCORE_Y-240, @total_lines.to_s, 4, 2] + MAIN_FONT
-    args.outputs.labels << [SCORE_X,     SCORE_Y-272, "TIME:", 4, 0] + MAIN_FONT
+    args.outputs.labels << [SCORE_X,     SCORE_Y-272, 'TIME:', 4, 0] + MAIN_FONT
     args.outputs.labels << [SCORE_X+200, SCORE_Y-304, timestr(@time), 4, 2] + MAIN_FONT
     # Next
-    args.outputs.labels << [NEXT_X, NEXT_Y, "NEXT:", 4, 0] + MAIN_FONT
+    args.outputs.labels << [NEXT_X, NEXT_Y, 'NEXT:', 4, 0] + MAIN_FONT
     y = NEXT_Y - 64
     @queue.reverse_each { |t|
       xoff = 0
