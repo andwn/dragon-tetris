@@ -1,6 +1,6 @@
-#devid=grind
-#devtitle=Andy Grind
-#gameid=dragon-tetris
-#gametitle=Dragon Tetris
-#version=1.0
-#icon=metadata/icon.png
+devid=grind
+devtitle=Andy Grind
+gameid=dragon-tetris
+gametitle=Dragon Tetris
+version=1.0
+icon=metadata/icon.png
